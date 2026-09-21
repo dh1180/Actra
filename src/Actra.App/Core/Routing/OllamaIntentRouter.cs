@@ -103,7 +103,7 @@ public sealed class OllamaIntentRouter : IIntentRouter, IDisposable
         }
     }
 
-    private static string BuildPrompt(string query) => $"""
+    private static string BuildPrompt(string query) => $$"""
 You are Actra's local intent router for Windows.
 Return exactly one JSON object and nothing else.
 
@@ -113,11 +113,11 @@ Allowed intents:
 - system.unknown: use when the request is unsupported or ambiguous
 
 Schema:
-{{
+{
   "intent": "app.launch | file.search | system.unknown",
   "confidence": 0.0,
-  "slots": {{}}
-}}
+  "slots": {}
+}
 
 For app.launch, slots may contain:
 - app: short app name such as notepad, calculator, vscode, chrome, explorer, settings
@@ -132,7 +132,7 @@ Never output shell commands.
 Do not execute anything yourself.
 
 User query:
-{JsonSerializer.Serialize(query)}
+{{JsonSerializer.Serialize(query)}}
 """;
 
     public void Dispose() => _httpClient.Dispose();
