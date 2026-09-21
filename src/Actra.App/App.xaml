@@ -1,0 +1,12 @@
+<Application x:Class="Actra.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#17181C"/>
+        <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#202127"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F5F5F7"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A7A9B0"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#8F8CFF"/>
+    </Application.Resources>
+</Application>
