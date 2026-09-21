@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Actra.Core.Services;
 
 public sealed record FileSearchItem(string Name, string FullPath, DateTime LastWriteTime);
