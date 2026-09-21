@@ -43,6 +43,7 @@ public sealed class FastPathRouter : IIntentRouter
         if (settings is not null)
             return Task.FromResult(settings);
 
+        // 파일 요청을 앱 실행보다 먼저 판별한다.
         var fileSearch = TryFileSearch(normalized);
         if (fileSearch is not null)
             return Task.FromResult(fileSearch);
@@ -57,9 +58,7 @@ public sealed class FastPathRouter : IIntentRouter
     private static CommandIntent? TrySettings(string query)
     {
         if (query is "설정" or "설정 열어" or "설정 열어줘" or "settings" or "open settings")
-        {
             return Intent("app.launch", ("app", "settings"));
-        }
 
         if (query.Contains("블루투스") && ContainsOpenVerb(query))
             return Intent("app.launch", ("app", "bluetooth-settings"));
@@ -88,6 +87,10 @@ public sealed class FastPathRouter : IIntentRouter
             "",
             RegexOptions.IgnoreCase).Trim();
 
+        // 파일처럼 보이는 문장은 앱 이름 fallback으로 넘기지 않는다.
+        if (LooksLikeFileRequest(query))
+            return null;
+
         if (!string.IsNullOrWhiteSpace(cleaned) && cleaned.Length <= 80)
             return Intent("app.launch", ("app", cleaned), confidence: 0.86);
 
@@ -96,45 +99,89 @@ public sealed class FastPathRouter : IIntentRouter
 
     private static CommandIntent? TryFileSearch(string query)
     {
+        var extension = DetectExtension(query);
+
         var asksToFind =
             query.Contains("찾아", StringComparison.OrdinalIgnoreCase) ||
             query.Contains("검색", StringComparison.OrdinalIgnoreCase) ||
             Regex.IsMatch(query, @"\b(find|search)\b", RegexOptions.IgnoreCase);
 
-        if (!asksToFind)
+        var asksToOpen = ContainsOpenVerb(query);
+
+        if (!asksToFind && !(asksToOpen && LooksLikeFileRequest(query)))
             return null;
 
         var slots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        if (query.Contains("다운로드")) slots["location"] = "downloads";
-        else if (query.Contains("바탕화면") || query.Contains("desktop")) slots["location"] = "desktop";
-        else if (query.Contains("문서") || query.Contains("documents")) slots["location"] = "documents";
-        else slots["location"] = "home";
+        if (ContainsDownloadReference(query))
+            slots["location"] = "downloads";
+        else if (query.Contains("바탕화면") || query.Contains("desktop"))
+            slots["location"] = "desktop";
+        else if (query.Contains("문서") || query.Contains("documents"))
+            slots["location"] = "documents";
+        else
+            slots["location"] = "home";
 
-        var extension = DetectExtension(query);
         if (extension is not null)
             slots["extension"] = extension;
 
+        if (asksToOpen)
+            slots["action"] = "open";
+
+        if (ContainsRecentReference(query))
+            slots["sort"] = "recent";
+
+        var keyword = ExtractFileKeyword(query);
+        if (!string.IsNullOrWhiteSpace(keyword))
+            slots["query"] = keyword;
+
+        return new CommandIntent("file.search", 0.98, slots, true);
+    }
+
+    private static string ExtractFileKeyword(string query)
+    {
         var keyword = query;
+
         string[] noise =
         [
-            "찾아줘", "찾아 줘", "찾아", "검색해줘", "검색해 줘", "검색", "find", "search",
-            "파일", "file", "다운로드에서", "다운로드", "바탕화면에서", "바탕화면",
-            "desktop", "문서에서", "문서", "documents"
+            "찾아줘", "찾아 줘", "찾아", "검색해줘", "검색해 줘", "검색",
+            "열어줘", "열어 줘", "열어", "open", "find", "search",
+            "파일", "file",
+            "다운로드에서", "다운로드 폴더에서", "다운로드 폴더", "다운로드",
+            "다운받은", "다운 받은", "다운받았던", "받은",
+            "바탕화면에서", "바탕화면", "desktop",
+            "문서에서", "문서", "documents",
+            "가장 최근에", "가장 최근", "최근에", "최근", "최신",
+            "방금", "좀", "제일"
         ];
 
-        foreach (var token in noise)
+        foreach (var token in noise.OrderByDescending(x => x.Length))
             keyword = keyword.Replace(token, "", StringComparison.OrdinalIgnoreCase);
 
         foreach (var extWord in new[] { "pdf", "docx", "word", "pptx", "ppt", "xlsx", "excel", "txt", "hwp", "hwpx", "zip" })
             keyword = Regex.Replace(keyword, $@"\b{Regex.Escape(extWord)}\b", "", RegexOptions.IgnoreCase);
 
-        keyword = Regex.Replace(keyword, @"\s+", " ").Trim();
-        if (!string.IsNullOrWhiteSpace(keyword))
-            slots["query"] = keyword;
-
-        return new CommandIntent("file.search", 0.96, slots, true);
+        return Regex.Replace(keyword, @"\s+", " ").Trim();
     }
+
+    private static bool LooksLikeFileRequest(string query) =>
+        DetectExtension(query) is not null ||
+        query.Contains("파일", StringComparison.OrdinalIgnoreCase) ||
+        ContainsDownloadReference(query) ||
+        query.Contains("바탕화면", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("문서", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsDownloadReference(string query) =>
+        query.Contains("다운로드", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("다운받", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("다운 받", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("download", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsRecentReference(string query) =>
+        query.Contains("최근", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("최신", StringComparison.OrdinalIgnoreCase) ||
+        query.Contains("방금", StringComparison.OrdinalIgnoreCase) ||
+        Regex.IsMatch(query, @"\b(latest|recent|newest)\b", RegexOptions.IgnoreCase);
 
     private static string? DetectExtension(string query)
     {
